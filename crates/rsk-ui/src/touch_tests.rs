@@ -64,3 +64,36 @@ fn cst3530_short_report_is_none() {
     assert_eq!(parse_cst3530(&[0, 0, 0, 0x01, 0x64]), None);
     assert_eq!(parse_cst3530(&[]), None);
 }
+
+
+#[test]
+fn ft3168_reconstructs_coordinates() {
+    // x=0x123, y=0x2C8. The high nibbles contain controller metadata and
+    // must be masked before the 12-bit coordinate is assembled.
+    let r = [0x01, 0xA1, 0x23, 0xB2, 0xC8];
+    assert_eq!(parse_ft3168(&r, 368, 448), Some(Point::new(0x123, 0x2C8)));
+}
+
+#[test]
+fn ft3168_accepts_last_physical_pixel() {
+    let r = [1, 0x01, 0x6F, 0x01, 0xBF]; // x=367, y=447
+    assert_eq!(parse_ft3168(&r, 368, 448), Some(Point::new(367, 447)));
+}
+
+#[test]
+fn ft3168_no_finger_is_none() {
+    assert_eq!(parse_ft3168(&[0, 0, 10, 0, 10], 368, 448), None);
+}
+
+#[test]
+fn ft3168_out_of_panel_coordinate_is_none() {
+    assert_eq!(parse_ft3168(&[1, 0x01, 0x70, 0, 10], 368, 448), None);
+    assert_eq!(parse_ft3168(&[1, 0, 10, 0x01, 0xC0], 368, 448), None);
+}
+
+#[test]
+fn ft3168_short_report_or_zero_panel_is_none() {
+    assert_eq!(parse_ft3168(&[1, 0, 10, 0], 368, 448), None);
+    assert_eq!(parse_ft3168(&[1, 0, 10, 0, 10], 0, 448), None);
+    assert_eq!(parse_ft3168(&[1, 0, 10, 0, 10], 368, 0), None);
+}
