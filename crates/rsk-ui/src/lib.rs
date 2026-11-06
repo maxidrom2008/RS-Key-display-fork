@@ -21,6 +21,7 @@ pub mod font;
 pub mod glyph;
 mod page_templates;
 pub mod render;
+pub mod qspi;
 pub mod scene;
 pub mod settings_store;
 pub mod theme;
