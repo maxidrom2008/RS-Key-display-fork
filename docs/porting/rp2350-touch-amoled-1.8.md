@@ -86,8 +86,10 @@ registers:
 - `0xA0`: device ID, expected to be `0x03`.
 
 Coordinate reconstruction is `((high & 0x0f) << 8) | low` for each axis.
-The first implementation should read the five-byte block beginning at 0x02,
-treat a zero finger count as no contact, and reject coordinates outside the
+The vendor driver reads the finger count at 0x02, then reads the X pair at
+0x03 and the Y pair at 0x05 (two bytes per coordinate). The pure parser in
+`rsk-ui` accepts those five values assembled into one logical report, treats
+a zero finger count as no contact, and rejects coordinates outside the
 368 x 448 physical panel. GPIO4 may later be used for interrupt-driven sampling;
 a short polling loop is adequate for initial bring-up.
 
@@ -131,8 +133,11 @@ a logic-analyzer check and physical smoke test on the target board.
    `display_panel.rs` is an ST7789 single-lane transport and is not a QSPI
    implementation.
 3. Implement SH8601 command/register writes and QSPI pixel streaming using
-   RP2350 PIO + DMA. Commands/window setup and pixel payloads have different
-   transfer phases; keep the panel selected only for complete transactions.
+   RP2350 PIO + DMA. The pure `rsk-ui::qspi` module now has host-tested command
+   byte expansion and pixel-nibble ordering helpers matching the Waveshare PIO
+   sample. The firmware backend still needs to wire those helpers to PIO/DMA.
+   Commands/window setup and pixel payloads have different transfer phases;
+   keep the panel selected only for complete transactions.
 4. Implement FT3168 I2C reads and parse them in a pure, host-tested function in
    `rsk-ui`. Map physical touch coordinates to the exact inverse of the panel
    rendering transform. Clamp/reject invalid contacts before hit-testing.
