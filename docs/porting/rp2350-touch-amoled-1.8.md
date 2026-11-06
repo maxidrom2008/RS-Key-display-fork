@@ -56,16 +56,19 @@ not a brightness output.
 
 ## QSPI transport contract
 
-The Waveshare Pico SDK sample uses PIO0 with two state machines:
-- SM0 for 4-wire QSPI payload/pixel data;
-- SM1 for 1-wire command/address phases.
+The Waveshare Pico SDK sample uses PIO0 state machine 0 with a four-output
+program (`out pins, 4` plus a clock side-set). It sends command/address bytes
+over DIO0 by software-expanding each serial byte into four PIO words; pixel data
+is sent as raw bytes, two nibbles per PIO word, across DIO0..DIO3. The sample
+contains a separate one-output PIO program, but its initialization is commented
+out and the demo does not use that state machine.
 
 The sample's QSPI GPIO setup owns GPIO9..17 as shown above, and selects the
 panel with GPIO9. The existing RS-Key ST7789 transport is a different protocol:
 it has a D/C pin and emits one data bit at a time. It cannot be retargeted by
 changing only pin numbers. The AMOLED backend must implement the SH8601 command,
-address/window and quad-pixel phases explicitly, preserving CS and PIO mode
-transitions exactly as required by the controller.
+address/window and quad-pixel phases explicitly, preserving CS and the PIO
+transaction boundaries exactly as required by the controller.
 
 The display is 368 x 448 RGB pixels. At RGB565, a full frame is 329,728 bytes.
 The old LCD UI uses a 240 x 320 logical coordinate space; the port must apply one
