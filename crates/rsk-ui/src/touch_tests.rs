@@ -114,3 +114,33 @@ fn amoled_transform_rejects_side_margins_and_outside_panel() {
     assert_eq!(map_rp2350_amoled_to_ui(Point::new(352, 100)), None);
     assert_eq!(map_rp2350_amoled_to_ui(Point::new(100, 448)), None);
 }
+
+
+#[test]
+fn amoled_rect_transform_covers_full_panel_content() {
+    assert_eq!(
+        map_ui_rect_to_rp2350_amoled(Rect::new(0, 0, PANEL_W, PANEL_H)),
+        Some(Rect::new(16, 0, 336, 448))
+    );
+}
+
+#[test]
+fn amoled_rect_transform_matches_touch_pixel_mapping() {
+    // The first logical pixel occupies 2x2 physical pixels under the inverse
+    // nearest-neighbour map; the final logical pixel occupies one physical pixel.
+    assert_eq!(
+        map_ui_rect_to_rp2350_amoled(Rect::new(0, 0, 1, 1)),
+        Some(Rect::new(16, 0, 2, 2))
+    );
+    assert_eq!(
+        map_ui_rect_to_rp2350_amoled(Rect::new(239, 319, 1, 1)),
+        Some(Rect::new(351, 447, 1, 1))
+    );
+}
+
+#[test]
+fn amoled_rect_transform_rejects_empty_or_out_of_bounds_rectangles() {
+    assert_eq!(map_ui_rect_to_rp2350_amoled(Rect::new(0, 0, 0, 1)), None);
+    assert_eq!(map_ui_rect_to_rp2350_amoled(Rect::new(239, 0, 2, 1)), None);
+    assert_eq!(map_ui_rect_to_rp2350_amoled(Rect::new(0, 319, 1, 2)), None);
+}
