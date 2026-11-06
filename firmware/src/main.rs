@@ -47,6 +47,12 @@ use rsk_usb::ctaphid::{CtapHid, FIDO_REPORT_DESCRIPTOR};
 mod core1;
 #[cfg(feature = "display")]
 mod display;
+#[cfg(feature = "amoled-transport")]
+#[allow(dead_code)]
+mod amoled_qspi;
+#[cfg(feature = "amoled-transport")]
+#[allow(dead_code)]
+mod amoled_panel;
 mod flash_storage;
 mod handler;
 mod led;
