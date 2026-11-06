@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 RS-Key contributors
 
-//! Parsing a capacitive-touch report into a panel coordinate. Two controllers
-//! appear on the reference board — a CST328 on V1 and a CST3530 on the V2 revision
-//! of 2026-10-14 — with different register maps and different report layouts. Pure
-//! and host-tested: the firmware's `display.rs` does the I2C transfer (read the
-//! report block and hand the raw bytes here), so the bit-twiddling that turns a
-//! report into the point [`crate::hit_confirm`] will judge sits under test rather
-//! than buried in the driver — a wrong reconstruction maps a tap to the wrong
-//! button.
+//! Parsing a capacitive-touch report into a panel coordinate. The reference
+//! display board uses CST328 (V1) or CST3530 (V2); the RP2350 AMOLED port adds
+//! FT3168. Pure and host-tested: the firmware's display backend owns I2C reads
+//! and hands raw report bytes here, so bit reconstruction and bounds checks
+//! stay independent of the hardware driver.
 
 use crate::Point;
 
@@ -54,6 +51,25 @@ pub fn parse_cst3530(report: &[u8]) -> Option<Point> {
     }
     let x = (report[4] as u16) | (((report[7] & 0x0F) as u16) << 8);
     let y = (report[5] as u16) | (((report[7] & 0xF0) as u16) << 4);
+    Some(Point::new(x, y))
+}
+
+/// Parse the five-byte FT3168 report read starting at register 0x02:
+/// finger count, X high, X low, Y high, Y low. Coordinates are 12-bit, with
+/// the upper nibble of each high byte reserved for controller metadata.
+///
+/// `panel_width` and `panel_height` are the physical panel dimensions. A point
+/// outside those bounds is rejected here, before it can be transformed into the
+/// UI's logical coordinate space and used for security-sensitive hit testing.
+pub fn parse_ft3168(report: &[u8], panel_width: u16, panel_height: u16) -> Option<Point> {
+    if report.len() < 5 || report[0] & 0x0F == 0 || panel_width == 0 || panel_height == 0 {
+        return None;
+    }
+    let x = (u16::from(report[1] & 0x0F) << 8) | u16::from(report[2]);
+    let y = (u16::from(report[3] & 0x0F) << 8) | u16::from(report[4]);
+    if x >= panel_width || y >= panel_height {
+        return None;
+    }
     Some(Point::new(x, y))
 }
 
