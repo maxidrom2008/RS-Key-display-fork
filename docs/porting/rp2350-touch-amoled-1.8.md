@@ -91,6 +91,37 @@ treat a zero finger count as no contact, and reject coordinates outside the
 368 x 448 physical panel. GPIO4 may later be used for interrupt-driven sampling;
 a short polling loop is adequate for initial bring-up.
 
+## Vendor initialization sequence
+
+The Waveshare Pico SDK sample uses this SH8601 power/reset sequence:
+
+1. Drive panel power enable GPIO17 high.
+2. Set reset GPIO15 high for 50 ms, low for 50 ms, then high for 300 ms.
+3. Send sleep-out command `0x11`, then wait 120 ms.
+4. Program line/TE settings: `0x44 = [0x01, 0xC5]`, `0x35 = [0x00]`.
+5. Select RGB565: `0x3A = [0x55]`.
+6. Program display control: `0xC4 = [0x80]`, `0x53 = [0x20]`.
+7. Set brightness with `0x51 = [0xFF]` (100%).
+8. Send display-on `0x29`, then wait 10 ms.
+
+For a window update, the sample sends `0x2A` with X start/end,
+`0x2B` with Y start/end (end coordinates are exclusive in the API), then
+`0x2C` before the pixel stream. Each register command is framed with the
+SH8601 QSPI write opcode `0x02` and a three-byte register address; the pixel
+stream uses the QSPI pixel-write opcode `0x32` with register address `0x2C`.
+The sample software-expands command bytes for DIO0 and sends pixel bytes raw
+through the four-lane PIO/DMA path.
+
+The FT3168 sample resets the touch chip high for 20 ms, low for 20 ms, then
+high for 50 ms; writes `0x01` to power-mode register `0xA5`; and reads the
+device ID from `0xA0`, expecting `0x03`. Point mode is the normal mode for
+touch coordinates. For sampling, read finger count (`0x02`), then the X pair
+(`0x03..0x04`) and Y pair (`0x05..0x06`). The existing pure parser accepts
+those five values assembled into one logical report.
+
+These values are a porting reference from the vendor demo, not a substitute for
+a logic-analyzer check and physical smoke test on the target board.
+
 ## Port architecture
 
 1. Keep the trusted-display state machine and policy in `rsk-display`; it is
