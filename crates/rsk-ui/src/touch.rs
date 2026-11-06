@@ -81,11 +81,12 @@ pub fn parse_ft3168(report: &[u8], panel_width: u16, panel_height: u16) -> Optio
 pub fn map_rp2350_amoled_to_ui(point: Point) -> Option<Point> {
     const X_OFFSET: u16 = 16;
     const CONTENT_WIDTH: u16 = 336;
+    const PHYSICAL_HEIGHT: u16 = 448;
     const SCALE_NUMERATOR: u32 = 5;
     const SCALE_DENOMINATOR: u32 = 7;
 
     let physical_x = point.x.checked_sub(X_OFFSET)?;
-    if physical_x >= CONTENT_WIDTH || point.y >= PANEL_H {
+    if physical_x >= CONTENT_WIDTH || point.y >= PHYSICAL_HEIGHT {
         return None;
     }
 
