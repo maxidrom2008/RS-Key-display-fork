@@ -68,10 +68,10 @@ fn cst3530_short_report_is_none() {
 
 #[test]
 fn ft3168_reconstructs_coordinates() {
-    // x=0x123, y=0x2C8. The high nibbles contain controller metadata and
+    // x=0x123, y=0x1B8. The high nibbles contain controller metadata and
     // must be masked before the 12-bit coordinate is assembled.
-    let r = [0x01, 0xA1, 0x23, 0xB2, 0xC8];
-    assert_eq!(parse_ft3168(&r, 368, 448), Some(Point::new(0x123, 0x2C8)));
+    let r = [0x01, 0xA1, 0x23, 0xB1, 0xB8];
+    assert_eq!(parse_ft3168(&r, 368, 448), Some(Point::new(0x123, 0x1B8)));
 }
 
 #[test]
