@@ -73,6 +73,32 @@ pub fn parse_ft3168(report: &[u8], panel_width: u16, panel_height: u16) -> Optio
     Some(Point::new(x, y))
 }
 
+
+/// Map a physical FT3168 coordinate from the 368x448 RP2350 AMOLED panel to
+/// the existing 240x320 logical UI. The logical surface is uniformly scaled
+/// by 7/5 (1.4x), so its physical width is 336px and it is centered with
+/// 16px side margins. The renderer must use the matching forward transform.
+pub fn map_rp2350_amoled_to_ui(point: Point) -> Option<Point> {
+    const X_OFFSET: u16 = 16;
+    const CONTENT_WIDTH: u16 = 336;
+    const PANEL_HEIGHT: u16 = 448;
+    const SCALE_NUMERATOR: u32 = 5;
+    const SCALE_DENOMINATOR: u32 = 7;
+
+    let physical_x = point.x.checked_sub(X_OFFSET)?;
+    if physical_x >= CONTENT_WIDTH || point.y >= PANEL_HEIGHT {
+        return None;
+    }
+
+    let logical_x = (u32::from(physical_x) * SCALE_NUMERATOR / SCALE_DENOMINATOR) as u16;
+    let logical_y = (u32::from(point.y) * SCALE_NUMERATOR / SCALE_DENOMINATOR) as u16;
+    if logical_x >= 240 || logical_y >= 320 {
+        return None;
+    }
+
+    Some(Point::new(logical_x, logical_y))
+}
+
 #[cfg(test)]
 #[path = "touch_tests.rs"]
 mod tests;
