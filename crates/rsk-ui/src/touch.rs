@@ -7,7 +7,7 @@
 //! and hands raw report bytes here, so bit reconstruction and bounds checks
 //! stay independent of the hardware driver.
 
-use crate::Point;
+use crate::{PANEL_H, PANEL_W, Point};
 
 /// Finger-1 status nibble (CST328 register 0xD000, low 4 bits) meaning a finger
 /// is down.
@@ -81,18 +81,23 @@ pub fn parse_ft3168(report: &[u8], panel_width: u16, panel_height: u16) -> Optio
 pub fn map_rp2350_amoled_to_ui(point: Point) -> Option<Point> {
     const X_OFFSET: u16 = 16;
     const CONTENT_WIDTH: u16 = 336;
-    const PANEL_HEIGHT: u16 = 448;
     const SCALE_NUMERATOR: u32 = 5;
     const SCALE_DENOMINATOR: u32 = 7;
 
     let physical_x = point.x.checked_sub(X_OFFSET)?;
-    if physical_x >= CONTENT_WIDTH || point.y >= PANEL_HEIGHT {
+    if physical_x >= CONTENT_WIDTH || point.y >= PANEL_H {
         return None;
     }
 
-    let logical_x = (u32::from(physical_x) * SCALE_NUMERATOR / SCALE_DENOMINATOR) as u16;
-    let logical_y = (u32::from(point.y) * SCALE_NUMERATOR / SCALE_DENOMINATOR) as u16;
-    if logical_x >= 240 || logical_y >= 320 {
+    let logical_x = u16::try_from(
+        u32::from(physical_x) * SCALE_NUMERATOR / SCALE_DENOMINATOR,
+    )
+    .ok()?;
+    let logical_y = u16::try_from(
+        u32::from(point.y) * SCALE_NUMERATOR / SCALE_DENOMINATOR,
+    )
+    .ok()?;
+    if logical_x >= PANEL_W || logical_y >= PANEL_H {
         return None;
     }
 
