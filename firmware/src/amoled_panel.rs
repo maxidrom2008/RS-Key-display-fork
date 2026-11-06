@@ -7,7 +7,7 @@
 //! It deliberately exposes bounded window writes instead of a framebuffer.
 
 use embassy_futures::block_on;
-use embassy_rp::gpio::{Level, Output};
+use embassy_rp::gpio::Output;
 use embassy_time::{Duration, block_for};
 
 use crate::amoled_qspi::PioQspiTx;
