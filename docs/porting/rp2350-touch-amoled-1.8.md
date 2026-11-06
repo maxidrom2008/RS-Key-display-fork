@@ -11,35 +11,82 @@ the ST7789/CST328 hardware on the RP2350-Touch-LCD-2.8.
 ## Board identity
 
 - MCU: RP2350A
-- External QSPI flash: W25Q128, 16 MiB
+- External QSPI flash: W25Q128JVSIQ, 16 MiB
 - Display: 1.8-inch AMOLED, 368 x 448, SH8601
 - Display host interface: 4-lane QSPI
-- Touch controller: FT3168, I2C, 7-bit address 0x38
+- Touch controller: FT3168, I2C1, 7-bit address 0x38
 
-Primary source: Waveshare's RP2350-Touch-AMOLED-1.8 product page and wiki.
-Waveshare's Pico SDK example archive contains the corresponding SH8601 QSPI
-and FT3168 example drivers. The upstream sample headers identify the panel
-signals and touch register map; retain their permissive license notice if any
-code is adapted.
+Sources:
+- [Waveshare product page](https://www.waveshare.com/RP2350-Touch-AMOLED-1.8.htm)
+- [Waveshare wiki](https://www.waveshare.com/wiki/RP2350-Touch-AMOLED-1.8)
+- Waveshare's official Pico SDK demo archive, linked from the wiki.
+  Its source headers retain the permissive Waveshare license; preserve that
+  notice if any driver code is adapted.
 
 ## Pin assignment
+
+The values below are from the Waveshare RP2350 Pico SDK sample's
+`DEV_Config.h` and `qspi_pio.h`. Do not reuse the similarly named ESP32-S3
+AMOLED board pin map: this is the RP2350 board and it wires the display
+directly to RP2350 GPIOs.
 
 | Signal | RP2350 GPIO | Notes |
 |---|---:|---|
 | LCD_CS | 9 | Active-low panel chip select |
 | QSPI_SCLK | 10 | Panel serial clock |
-| QSPI_SIO0..3 | 11..14 | Four data lanes, contiguous |
-| LCD_RESET | 15 | Panel reset, active-low |
-| LCD_TE | 16 | Tearing-effect signal; optional unless synchronization is added |
-| DSI_PWR_EN | 17 | Must be driven high to enable panel power |
-| TP_INT | 4 | Touch interrupt; polling can be used initially |
-| TP_RESET | 5 | Touch reset, active-low |
-| TP_SDA | 6 | I2C data |
-| TP_SCL | 7 | I2C clock |
+| QSPI_SIO0 | 11 | QSPI data lane 0 |
+| QSPI_SIO1 | 12 | QSPI data lane 1 |
+| QSPI_SIO2 | 13 | QSPI data lane 2 |
+| QSPI_SIO3 | 14 | QSPI data lane 3 |
+| LCD_RESET | 15 | Active-low panel reset |
+| DSI_PWR_EN | 17 | Drive high to enable panel power |
+| TP_INT | 4 | FT3168 interrupt; polling is sufficient for first bring-up |
+| TP_RESET | 5 | FT3168 reset, active-low pulse |
+| I2C1_SDA | 6 | FT3168 data |
+| I2C1_SCL | 7 | FT3168 clock |
 
-The panel has no separate PWM backlight pin. Brightness is a SH8601 command
-(`0x51` in the vendor sample), so the existing LCD backlight-PWM path must not
-be reused. Panel power enable (GPIO17) is a different function from brightness.
+The sample also labels GPIO8 as `DOF_INT1` and GPIO18 as `SYS_OUT`; they are
+not display/touch signals and are not claimed by this port. GPIO16 is not listed
+as an AMOLED signal in the RP2350 sample header.
+
+The panel has no separate PWM backlight pin. Brightness is set with the SH8601
+command `0x51` (the vendor demo calls `AMOLED_1IN8_SetBrightness`), so the
+existing LCD backlight-PWM path must not be reused. GPIO17 is panel power enable,
+not a brightness output.
+
+## QSPI transport contract
+
+The Waveshare Pico SDK sample uses PIO0 with two state machines:
+- SM0 for 4-wire QSPI payload/pixel data;
+- SM1 for 1-wire command/address phases.
+
+The sample's QSPI GPIO setup owns GPIO9..17 as shown above, and selects the
+panel with GPIO9. The existing RS-Key ST7789 transport is a different protocol:
+it has a D/C pin and emits one data bit at a time. It cannot be retargeted by
+changing only pin numbers. The AMOLED backend must implement the SH8601 command,
+address/window and quad-pixel phases explicitly, preserving CS and PIO mode
+transitions exactly as required by the controller.
+
+The display is 368 x 448 RGB pixels. At RGB565, a full frame is 329,728 bytes.
+The old LCD UI uses a 240 x 320 logical coordinate space; the port must apply one
+consistent transform to both rendering and touch hit-testing. A reasonable first
+layout is uniform 1.4x scaling (336 x 448) with 16-pixel horizontal margins.
+Do not scale the output while leaving touch coordinates untransformed.
+
+## FT3168 touch report
+
+Waveshare's FT3168 header defines the 7-bit address as `0x38` and these
+registers:
+- `0x02`: finger count;
+- `0x03..0x04`: first-contact X high/low;
+- `0x05..0x06`: first-contact Y high/low;
+- `0xA0`: device ID, expected to be `0x03`.
+
+Coordinate reconstruction is `((high & 0x0f) << 8) | low` for each axis.
+The first implementation should read the five-byte block beginning at 0x02,
+treat a zero finger count as no contact, and reject coordinates outside the
+368 x 448 physical panel. GPIO4 may later be used for interrupt-driven sampling;
+a short polling loop is adequate for initial bring-up.
 
 ## Port architecture
 
@@ -47,33 +94,32 @@ be reused. Panel power enable (GPIO17) is a different function from brightness.
    hardware independent and already owns the security-sensitive approve/deny
    and PIN flows.
 2. Add a distinct RP2350 AMOLED hardware backend. The existing
-   `display_panel.rs` is a single-lane ST7789 transport and is not a QSPI
+   `display_panel.rs` is an ST7789 single-lane transport and is not a QSPI
    implementation.
 3. Implement SH8601 command/register writes and QSPI pixel streaming using
    RP2350 PIO + DMA. Commands/window setup and pixel payloads have different
-   transfer phases; keep CS asserted over each command/data transaction.
-4. Implement FT3168 I2C reads (address 0x38; finger count at 0x02, first
-   contact coordinates at 0x03..0x06) and map physical touch coordinates to
-   the UI coordinate space. Clamp invalid/out-of-range contacts.
-5. Preserve the current 240 x 320 logical UI initially and scale/translate
+   transfer phases; keep the panel selected only for complete transactions.
+4. Implement FT3168 I2C reads and parse them in a pure, host-tested function in
+   `rsk-ui`. Map physical touch coordinates to the exact inverse of the panel
+   rendering transform. Clamp/reject invalid contacts before hit-testing.
+5. Preserve the existing 240 x 320 logical UI initially and scale/translate
    rendering and touch coordinates consistently, or undertake a separately
-   tested responsive-layout change for 368 x 448. Never scale only the pixels:
-   hit-testing must use the exact inverse transform.
-6. Treat GPIO17 power-up, GPIO15 reset timing, SH8601 sleep-out/display-on,
-   pixel format, orientation, brightness, and QSPI clock as explicit board
-   initialization settings. Keep panel power off until the driver is ready.
+   tested responsive-layout change for 368 x 448.
+6. Bring GPIO17 power enable high, pulse GPIO15 reset with the vendor timing,
+   initialize SH8601 sleep-out/display-on, pixel format, orientation and
+   brightness. Keep panel power and reset sequencing explicit.
 7. Add a board-specific build flavor and compile-time pin-collision checks.
-   The existing LCD defaults (GPIO13/14/15/16/17 and CST328/CST3530) must remain
-   unchanged for the RP2350-Touch-LCD-2.8.
+   The existing LCD defaults (ST7789 GPIO13/14/15, PWM backlight GPIO16,
+   CST328/CST3530 on I2C1) must remain unchanged.
 
 ## Validation gates
 
 - Host tests for FT3168 report parsing, coordinate transforms, clipping, and
   QSPI byte/nibble packing.
 - Firmware compile for both the existing LCD flavor and the new AMOLED flavor.
-- Hardware smoke test: panel reset/init, color bars, full-frame DMA transfer,
-  partial-window transfer, FT3168 touch coordinate readout, and repeated wake/
-  reset cycles.
+- Hardware smoke test: panel power/reset/init, color bars, full-frame DMA
+  transfer, partial-window transfer, FT3168 touch coordinate readout, and
+  repeated power/reset cycles.
 - End-to-end trusted-display test: on-device PIN entry and approve/deny with a
   known relying-party string. A successful compile alone is not hardware
   validation.
