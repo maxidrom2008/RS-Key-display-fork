@@ -7,7 +7,7 @@
 //! and hands raw report bytes here, so bit reconstruction and bounds checks
 //! stay independent of the hardware driver.
 
-use crate::{PANEL_H, PANEL_W, Point};
+use crate::{PANEL_H, PANEL_W, Point, Rect};
 
 /// Finger-1 status nibble (CST328 register 0xD000, low 4 bits) meaning a finger
 /// is down.
@@ -103,6 +103,56 @@ pub fn map_rp2350_amoled_to_ui(point: Point) -> Option<Point> {
     }
 
     Some(Point::new(logical_x, logical_y))
+}
+
+
+/// Map a logical 240x320 UI rectangle to the smallest physical AMOLED rectangle
+/// that contains exactly the pixels whose touch samples map back into it.
+/// This is the forward partner of `map_rp2350_amoled_to_ui`: the renderer must
+/// use it when scaling a damaged logical region, so painted buttons and
+/// touch hit-tests stay on the same physical pixels.
+pub fn map_ui_rect_to_rp2350_amoled(rect: Rect) -> Option<Rect> {
+    const X_OFFSET: u32 = 16;
+    const SCALE_NUMERATOR: u32 = 7;
+    const SCALE_DENOMINATOR: u32 = 5;
+    const PHYSICAL_WIDTH: u32 = 368;
+    const PHYSICAL_HEIGHT: u32 = 448;
+
+    if rect.w == 0 || rect.h == 0 {
+        return None;
+    }
+
+    let x0 = u32::from(rect.x);
+    let y0 = u32::from(rect.y);
+    let x1 = x0.checked_add(u32::from(rect.w))?;
+    let y1 = y0.checked_add(u32::from(rect.h))?;
+    if x1 > u32::from(PANEL_W) || y1 > u32::from(PANEL_H) {
+        return None;
+    }
+
+    // ceil(a * 7 / 5) gives the first physical pixel whose inverse-mapped
+    // logical coordinate is >= a.
+    let scale_edge = |value: u32| -> Option<u32> {
+        value
+            .checked_mul(SCALE_NUMERATOR)?
+            .checked_add(SCALE_DENOMINATOR - 1)
+            .map(|v| v / SCALE_DENOMINATOR)
+    };
+
+    let px0 = X_OFFSET.checked_add(scale_edge(x0)?)?;
+    let px1 = X_OFFSET.checked_add(scale_edge(x1)?)?;
+    let py0 = scale_edge(y0)?;
+    let py1 = scale_edge(y1)?;
+    if px1 > PHYSICAL_WIDTH || py1 > PHYSICAL_HEIGHT || px0 >= px1 || py0 >= py1 {
+        return None;
+    }
+
+    Some(Rect::new(
+        u16::try_from(px0).ok()?,
+        u16::try_from(py0).ok()?,
+        u16::try_from(px1 - px0).ok()?,
+        u16::try_from(py1 - py0).ok()?,
+    ))
 }
 
 #[cfg(test)]
