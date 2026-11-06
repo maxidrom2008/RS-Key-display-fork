@@ -97,3 +97,20 @@ fn ft3168_short_report_or_zero_panel_is_none() {
     assert_eq!(parse_ft3168(&[1, 0, 10, 0, 10], 0, 448), None);
     assert_eq!(parse_ft3168(&[1, 0, 10, 0, 10], 368, 0), None);
 }
+
+
+#[test]
+fn amoled_transform_maps_the_content_origin_and_last_pixel() {
+    assert_eq!(map_rp2350_amoled_to_ui(Point::new(16, 0)), Some(Point::new(0, 0)));
+    assert_eq!(
+        map_rp2350_amoled_to_ui(Point::new(351, 447)),
+        Some(Point::new(239, 319))
+    );
+}
+
+#[test]
+fn amoled_transform_rejects_side_margins_and_outside_panel() {
+    assert_eq!(map_rp2350_amoled_to_ui(Point::new(15, 100)), None);
+    assert_eq!(map_rp2350_amoled_to_ui(Point::new(352, 100)), None);
+    assert_eq!(map_rp2350_amoled_to_ui(Point::new(100, 448)), None);
+}
